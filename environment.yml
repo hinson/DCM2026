@@ -1,0 +1,33 @@
+name: dcm2024
+
+
+dependencies:
+  - python=3.12
+  - pip
+  # 基本数据科学库
+  - numpy
+  - numba
+  - einops
+  - pandas
+  - scipy
+  - statsmodels
+  - jupyter
+  # 数据格式
+  - openpyxl
+  - orjson
+  - pyarrow
+  # 通用机器学习库
+  - scikit-learn=1.5.2
+  # 树模型
+  - lightgbm 
+  # 时序列
+  - tsfresh # 特征工程
+  - dtaidistance # dtw高速实现
+  # 可视化
+  - matplotlib
+  - mpld3
+  - seaborn
+  # 模型解释
+  - shap
+  # 应用
+  - streamlit

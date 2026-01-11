@@ -1,0 +1,62 @@
+name: dcm2024
+channels:
+  - pytorch
+  - nvidia
+
+dependencies:
+  - python=3.12
+  - pip
+  # - boost
+  # - nvidia/label/cuda-12.4.1::cuda-toolkit
+  # - nvidia/label/cuda-12.4.1::cuda-opencl-dev
+    # - lightgbm --config-settings=cmake.define.USE_GPU=ON --config-settings=cmake.define.OpenCL_INCLUDE_DIR="/usr/local/cuda/include/" --config-settings=cmake.define.OpenCL_LIBRARY="/usr/local/cuda/lib64/libOpenCL.so"
+  - cudatoolkit
+  - dask
+  - cupy
+  # 基本数据科学库
+  - numpy
+  - numba
+  - einops
+  - pandas
+  - scipy
+  - statsmodels
+  - jupyter
+  # 数据格式
+  - openpyxl
+  - orjson
+  - pyarrow
+  # 通用机器学习库
+  - scikit-learn=1.5.2
+  - imbalanced-learn
+  - pytorch
+  - pytorch-cuda=12.4
+  # 树模型
+  - xgboost
+  #- lightgbm # 使用GPU版本需要从源码编译，并在env/lib中建立系统libnvidia-opencl.so.1的软连接
+  - catboost
+  - perpetual
+  # 时序列
+  - pyts
+  - tslearn # 时序列机器学习
+  - stumpy # 模式检测
+  - tsfresh # 特征工程
+  - prophet # 预测、变化点检测
+  - pyod # 异常检测
+  - timeseriesai::tsai # 深度学习数据增强
+  - pywavelets # 小波变换
+  - pykalman # 卡尔曼滤波器
+  - ruptures # 变化点检测
+  - dtaidistance # dtw高速实现
+  # 可视化
+  - matplotlib
+  - mpld3
+  - seaborn
+  - joypy # 岭图
+  - wordcloud
+  # 模型调优
+  - mlflow
+  - optuna
+  # 模型解释
+  - shap
+  # 应用
+  - streamlit
