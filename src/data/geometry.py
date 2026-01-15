@@ -3,7 +3,7 @@
 # @author Quexuan Zhang
 # @description 几何计算有关的函数
 # @created 2024-12-03T14:12:08.765Z+08:00
-# @last-modified 2025-02-17T20:12:38.634Z+08:00
+# @last-modified 2026-01-14T16:50:00.563Z+08:00
 #
 
 from collections.abc import Sequence

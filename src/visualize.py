@@ -3,7 +3,7 @@
 # @author Quexuan Zhang
 # @description
 # @created 2024-12-13T19:11:46.547Z+08:00
-# @last-modified 2025-12-11T10:53:53.719Z+08:00
+# @last-modified 2026-01-13T20:59:43.866Z+08:00
 #
 
 from collections.abc import Sequence
@@ -363,6 +363,7 @@ def plot_dist_changes(
     # plt.plot(peaks_max, areas[peaks_max], "rv", label="平滑后极大值点")
 
     periods_open, periods_close = get_period_intervals(peaks_min, peaks_max)
+    print(peaks_min, peaks_max)
 
     for start, end in periods_open:
         # ax.axvspan(start, end, color="red", alpha=0.1, label="open")
@@ -405,7 +406,7 @@ def plot_area_changes(
     ax.plot(areas, c="k", lw=1)
 
     #
-    peaks_min, peaks_max = find_period_peaks(areas, prominence=1)
+    peaks_min, peaks_max = find_period_peaks(areas, prominence=0.25)
     # plt.plot(peaks_min, areas[peaks_min], "g^", label="平滑后极小值点")
     # plt.plot(peaks_max, areas[peaks_max], "rv", label="平滑后极大值点")
 

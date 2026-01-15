@@ -3,16 +3,16 @@
 # @author Quexuan Zhang
 # @description 原始关键点数据的相关数据结构定义和描述
 # @created 2024-11-27T11:38:47.940Z+08:00
-# @last-modified 2025-03-20T17:13:26.785Z+08:00
+# @last-modified 2026-01-13T17:26:42.169Z+08:00
 #
 
-import tomllib
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
+import tomllib
 
 with (Path(__file__).parent / "config.toml").open("rb") as f:
     config = tomllib.load(f)

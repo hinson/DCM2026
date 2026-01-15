@@ -3,7 +3,7 @@
 # @author Quexuan Zhang
 # @description
 # @created 2024-12-20T10:15:32.949Z+08:00
-# @last-modified 2025-02-17T19:52:18.059Z+08:00
+# @last-modified 2026-01-15T17:00:21.758Z+08:00
 #
 
 
@@ -34,6 +34,7 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 from data.keypoint import *
 from data.preprocessing import get_json_data
+from data.timeseries import smooth_frame_arr
 from data.utils import impute_data
 from feature import FeatureGenerator, values_to_dataframe
 from transform import transform_d2a_per_reminmax
@@ -74,8 +75,10 @@ div[data-testid="stDialog"] div[role="dialog"] {
 )
 
 data_dir: Final[Path] = Path("./data")
-static_dir: Final[Path] = Path("./static")
-cache_dir: Final[Path] = static_dir / "cache"
+# static_dir: Final[Path] = Path("./static")
+cache_dir: Final[Path] = Path("~/.cache/dcmapp").expanduser()
+if not cache_dir.exists():
+    cache_dir.mkdir(parents=True)
 
 
 def visualize_data(row: pd.Series):
@@ -85,6 +88,8 @@ def visualize_data(row: pd.Series):
     st.header(name)
 
     columns = st.columns([2, 1, 1, 1, 1])
+
+    # smooth_frame_arr(frame_arr)
 
     with columns[0], _lock:
         fig = plot_dist_changes(

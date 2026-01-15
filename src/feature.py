@@ -3,7 +3,7 @@
 # @author Quexuan Zhang
 # @description
 # @created 2024-12-05T15:49:19.357Z+08:00
-# @last-modified 2025-12-11T11:05:38.053Z+08:00
+# @last-modified 2026-01-15T08:19:08.438Z+08:00
 #
 
 import multiprocessing as mp
@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import psutil
+from scipy.signal import savgol_filter
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import minmax_scale
 from tqdm.auto import tqdm
@@ -50,12 +51,12 @@ from data.timeseries import (
     get_period_intervals,
     get_periods,
     get_polygon_areas,
+    smooth_frame_arr,
 )
-from transform import whiten_only
 
 
 def default_tsfc_settings() -> ComprehensiveFCParameters:
-    """默认时序列统计特征：maximum, mean, median, minimum, quantile(q=0.25), quantile(q=0.75), root_mean_square, skewness, standard_deviation, variance, variation_coefficien
+    """默认时序列统计特征：maximum, mean, median, minimum, quantile(q=0.25), quantile(q=0.75), root_mean_square, standard_deviation, variance, variation_coefficien
 
     Returns:
         默认时序列统计特征参数配置
@@ -67,7 +68,7 @@ def default_tsfc_settings() -> ComprehensiveFCParameters:
     settings.update(
         dict(
             variation_coefficient=None,
-            skewness=None,
+            # skewness=None,
             quantile=[dict(q=0.25), dict(q=0.75)],
             # sample_entropy=None,
         )
@@ -111,6 +112,7 @@ def __extract_kinematic_features(datum: KeypointData, feat: np.ndarray, name: st
     frame_rate = datum.frame_rate
 
     geom = minmax_scale(feat)
+
     vel = np.diff(geom, axis=0) * frame_rate
     acc = np.diff(vel, axis=0) * frame_rate
     # jerk = np.diff(acc, axis=0) * frame_rate
@@ -242,21 +244,25 @@ def _extract_period_features(
     feature_dict["periods"] = periods
 
     # 动作前停顿/延迟
-    feature_dict.update(__extract_pause_features(datum, peaks_min, peaks_max, frame_feature_dict))
+    feature_dict.update(
+        __extract_pause_features(datum, peaks_min, peaks_max, frame_feature_dict)
+    )
 
     # 伸握阶段
     periods_open, periods_close = get_period_intervals(peaks_min, peaks_max)
-    # if periods != 0 and not periods_open and not periods_close:
-    #     raise RuntimeError(f"{peaks_min=}\n{peaks_max=}")
+    # if periods != 0 and (not periods_open or not periods_close):
+    #     print(f"{peaks_min=}\n{peaks_max=}")
 
-    feature_dict.update(__extract_phase_features(periods_open, periods_close, frame_feature_dict))
-
-    # 首尾周期段伸握特征
     feature_dict.update(
-        __extract_headtail_periods_features(
-            periods_open, periods_close, frame_feature_dict, num_headtail_period_limits
-        )
+        __extract_phase_features(periods_open, periods_close, frame_feature_dict)
     )
+
+    # # 首尾周期段伸握特征
+    # feature_dict.update(
+    #     __extract_headtail_periods_features(
+    #         periods_open, periods_close, frame_feature_dict, num_headtail_period_limits
+    #     )
+    # )
 
     return feature_dict
 
@@ -297,7 +303,9 @@ def __extract_pause_features(
         )
 
         fname = pieces[0]
-        feature_dict[f"pause_{fname}_whole"] = np.concatenate([pauses_open, pauses_close])
+        feature_dict[f"pause_{fname}_whole"] = np.concatenate(
+            [pauses_open, pauses_close]
+        )
         feature_dict[f"pause_{fname}_open"] = pauses_open
         feature_dict[f"pause_{fname}_close"] = pauses_close
 
@@ -315,7 +323,10 @@ def __extract_phase_features(
     feature_dict = {}
     for name, feat in frame_feature_dict.items():
         pieces = name.split("_")
-        if pieces[0] not in ("dist", "combo", "angle", "area") or pieces[-1] in ("open", "close"):
+        if pieces[0] not in ("dist", "combo", "angle", "area") or pieces[-1] in (
+            "open",
+            "close",
+        ):
             continue
 
         pfeat_dict = defaultdict(list)
@@ -324,6 +335,8 @@ def __extract_phase_features(
             for start, end in periods:
                 pfeat = feat[start:end]
                 # pfeat_dict[pname].append(pfeat)
+                if len(pfeat) == 0:
+                    continue
 
                 pfeat_dict[f"mean_{pname}"].append(np.nanmean(pfeat))
                 # pfeat_dict[f"std_{pname}"].append(np.nanstd(pfeat))
@@ -367,6 +380,8 @@ def __extract_headtail_periods_features(
                 for start, end in speriods:
                     pfeat = feat[start:end]
                     # pfeat_dict[pname].append(pfeat)
+                    if len(pfeat) == 0:
+                        continue
 
                     pfeat_dict[f"mean_{pname}{sname}"].append(np.nanmean(pfeat))
                     # pfeat_dict[f"std_{pname}{sname}"].append(np.nanstd(pfeat))
@@ -404,7 +419,9 @@ def _extract_dtw_features(
         fname = f"dist_{tid}_vel"
         feat = frame_feature_dict[fname]
 
-        feature_dict[f"asyn_{tid}_ref"] = get_asyns(feat, reference, scaler=scaler, window=25)
+        feature_dict[f"asyn_{tid}_ref"] = get_asyns(
+            feat, reference, scaler=scaler, window=25
+        )
 
     # 指尖 - 指尖
     for t1, t2 in combinations(keypoint_ids, 2):
@@ -415,7 +432,9 @@ def _extract_dtw_features(
 
         # scaler = 1000.0 / len(feat1)
 
-        feature_dict[f"asyn_{t1}_{t2}"] = get_asyns(feat1, feat2, scaler=scaler, window=25)
+        feature_dict[f"asyn_{t1}_{t2}"] = get_asyns(
+            feat1, feat2, scaler=scaler, window=25
+        )
 
     return feature_dict
 
@@ -472,6 +491,9 @@ def _preprocess_sample(
     feature_dict = {}
 
     try:
+        # 平滑坐标
+        smooth_frame_arr(frame_arr)
+
         # 距离相关
         feature_dict.update(_extract_dist_features(datum, frame_arr, tip_ids))
         feature_dict.update(_extract_combo_dist_features(feature_dict, tip_ids))

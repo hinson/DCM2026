@@ -3,7 +3,7 @@
 # @author Quexuan Zhang
 # @description
 # @created 2024-12-04T19:37:43.491Z+08:00
-# @last-modified 2025-12-10T15:52:48.651Z+08:00
+# @last-modified 2026-01-15T18:47:01.623Z+08:00
 #
 
 from collections.abc import Sequence
@@ -13,7 +13,7 @@ import numpy as np
 from dtaidistance import dtw
 from numba import njit
 from scipy.ndimage import gaussian_filter1d
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 from scipy.stats import zscore
 
 from .geometry import get_polygon_areas, get_polygon_vertices
@@ -22,29 +22,94 @@ from .preprocessing import minmax_over_frames
 
 Interval = tuple[int, int]
 
-
-def adaptive_gaussian_filter(data: np.ndarray, base_sigma: float = 1.0) -> np.ndarray:
-    """根据局部变化幅度动态调整标准差的自适应高斯滤波平滑器
+def hampel_filter(data, window_size=5, n_sigmas=3):
+    """
+    Hampel 滤波器实现
 
     Arguments:
-        data -- 一维数组
-
-    Keyword Arguments:
-        base_sigma -- 初始标准差 (default: {1.})
+        data: 输入的一维 numpy 数组 (x 或 y 坐标序列)
+        window_size: 滑动窗口半径 (k)，实际窗口长度为 2k+1
+        n_sigmas: 判别离群值的阈值系数，默认为 3
 
     Returns:
-        平滑后数据
+        滤波后的序列
     """
-    #
-    variations = np.abs(np.diff(data, prepend=data[0]))
-    sigma_values = base_sigma * (1 + variations / np.max(variations))
-    filtered = [gaussian_filter1d(data, sigma=s) for s in sigma_values]
-    smoothed_data = np.asarray(filtered).mean(axis=0)
+    n = len(data)
+    new_data = data.copy()
+    # 这里的 1.4826 是正态分布下的缩放因子
+    k = 1.4826
+
+    for i in range(window_size, n - window_size):
+        # 提取窗口数据
+        window = data[i - window_size : i + window_size + 1]
+        x_median = np.median(window)
+
+        # 计算 MAD
+        mad = np.median(np.abs(window - x_median))
+        sigma = k * mad
+
+        # 判断并替换离群值
+        if np.abs(data[i] - x_median) > n_sigmas * sigma:
+            new_data[i] = x_median
+
+    return new_data
+
+def adaptive_gaussian_smooth(data, sigma_min=1, sigma_max=4, window_size=20):
+    """
+    自适应高斯平滑
+
+    Arguments:
+        sigma_min: 在波峰/波谷处使用的平滑强度（保护特征）
+        sigma_max: 在平坦/噪声区使用的平滑强度（强力去噪）
+        window_size: 用于评估局部波动的窗口大小
+
+    Returns:
+        滤波后的序列
+    """
+    # 1. 计算局部波动（标准差）
+    # 使用滑动窗口标准差来衡量该点是否属于“变化剧烈区”
+    local_std = np.array(
+        [
+            np.std(
+                data[
+                    max(0, i - window_size // 2) : min(len(data), i + window_size // 2)
+                ]
+            )
+            for i in range(len(data))
+        ]
+    )
+
+    # 2. 归一化波动权重 (0 到 1)
+    # 波动越大，weight 越接近 1
+    norm_std = (local_std - np.min(local_std)) / (
+        np.max(local_std) - np.min(local_std) + 1e-6
+    )
+
+    # 3. 预计算两个极端的平滑效果
+    low_smooth = gaussian_filter1d(data, sigma=sigma_min)  # 弱平滑，保留细节
+    high_smooth = gaussian_filter1d(data, sigma=sigma_max)  # 强平滑，去除噪声
+
+    # 4. 关键：根据局部波动进行融合
+    # 在波动大（norm_std高）的地方，更多地使用 low_smooth
+    # 在波动小（norm_std低）的地方，更多地使用 high_smooth
+    # 注意：这里的逻辑是 (1 - norm_std)，因为波动越大 sigma 应该越小
+    smoothed_data = norm_std * low_smooth + (1 - norm_std) * high_smooth
+
     return smoothed_data
+
+def smooth_frame_arr(frame_arr):
+    for i in range(21):
+        for c in range(2):
+            frame_arr[:, i, c] = hampel_filter(
+                frame_arr[:, i, c], window_size=2, n_sigmas=3
+            )
+            # frame_arr[:, i, c] = savgol_filter(
+            #     frame_arr[:, i, c], window_length=7, polyorder=2
+            # )
 
 
 def find_period_peaks(
-    data: np.ndarray, base_sigma=1, prominence=0.4, **kwargs
+    data: np.ndarray, sigma_min=1, sigma_max=4, prominence=0.4, **kwargs
 ) -> tuple[np.ndarray, np.ndarray]:
     """利用高斯滤波平滑器平滑数据后，寻找极值点
 
@@ -58,7 +123,7 @@ def find_period_peaks(
     Returns:
         极大值点数组和极小值点数组
     """
-    smoothed = adaptive_gaussian_filter(data, base_sigma=base_sigma)
+    smoothed = adaptive_gaussian_smooth(data, sigma_min=sigma_min, sigma_max=sigma_max)
     peaks_max, _ = find_peaks(smoothed, prominence=prominence, **kwargs)  # 极大值
     peaks_min, _ = find_peaks(-smoothed, prominence=prominence, **kwargs)  # 极小值
 
@@ -69,9 +134,8 @@ def find_period_peaks_by_area(
     frame_arr: np.ndarray,
     vertice_ids: KeypointSeq,
     left: bool,
-    base_sigma=1,
     prominence=0.4,
-    **kwargs
+    **kwargs,
 ) -> tuple[list[int], list[int]]:
     """根据面积变化获取伸握过程周期极值点数组
 
@@ -90,7 +154,7 @@ def find_period_peaks_by_area(
     """
     vertices = get_polygon_vertices(frame_arr, vertice_ids, left)
     areas = get_polygon_areas(vertices)
-    return find_period_peaks(areas, base_sigma=base_sigma, prominence=prominence, **kwargs)
+    return find_period_peaks(areas, prominence=prominence, **kwargs)
 
 
 def get_period_intervals(
@@ -111,13 +175,16 @@ def get_period_intervals(
         return [], []
 
     if peaks_min[0] < peaks_max[0]:
-        zipped = zip(peaks_min, peaks_max)
+        zipped = zip(peaks_min, np.append(peaks_max, -1))
         start = 0
     else:
-        zipped = zip(peaks_max, peaks_min)
+        zipped = zip(peaks_max, np.append(peaks_min, -1))
         start = 1
 
     for i, pair in enumerate(pairwise(chain.from_iterable(zipped)), start):
+        if pair[1] == -1:
+            continue
+
         if i % 2 == 0:
             periods_open.append(pair)
         else:
@@ -150,7 +217,7 @@ def find_period_intervals_by_area(
         伸过程周期变化点区间数组和握过程周期变化点区间数组
     """
     peaks_min, peaks_max = find_period_peaks_by_area(
-        frame_arr, vertice_ids, left, base_sigma, prominence
+        frame_arr, vertice_ids, left, prominence
     )
     return get_period_intervals(peaks_min, peaks_max)
 

@@ -3,13 +3,14 @@
 # @author Quexuan Zhang
 # @description 数据预处理相关函数
 # @created 2024-11-28T12:44:09.764Z+08:00
-# @last-modified 2025-08-25T20:27:12.708Z+08:00
+# @last-modified 2026-01-15T17:03:29.514Z+08:00
 #
 from copy import copy
 from typing import IO, Any
 
 import numpy as np
 import orjson
+import pandas as pd
 from numba import njit
 
 from .keypoint import *
@@ -23,10 +24,9 @@ nan_point = Point(np.nan, np.nan)
 def delete_unused_keys(json: dict[str, Any]) -> None:
     """删除无用的键值
 
-    Parameters
-    ----------
-    json : dict[str, Any]
-        原始数据Json格式字典
+    Arguments:
+        json : dict[str, Any]
+            原始数据Json格式字典
     """
     for key in unused_keys:
         if key in json:
@@ -100,15 +100,13 @@ def get_json_data(f: IO) -> KeypointData:
 def set_outliers_na(data: KeypointData) -> KeypointData:
     """对非法值设置为缺失值
 
-    Parameters
-    ----------
-    data : KeypointData
-        原始关键点数据
+    Arguments:
+        data : KeypointData
+            原始关键点数据
 
-    Returns
-    -------
-    KeypointData
-        修改后的关键点数据
+    Returns:
+        KeypointData
+            修改后的关键点数据
     """
     data = copy(data)
 
@@ -186,6 +184,9 @@ def interpolate_missing_frames(data: KeypointData, interval=10.0) -> np.ndarray:
                     indices[nan_mask], indices[valid], keypoint_data[valid]
                 )
             sample[:, k, c] = keypoint_data
+            # sample[:, k, c] = (
+            #     pd.Series(sample[:, k, c]).interpolate(method="linear").bfill().values
+            # )
 
     return sample
 
@@ -206,6 +207,7 @@ def minmax_over_frames(frame_arr: np.ndarray) -> np.ndarray:
     new_arr = (frame_arr.copy() - min_value) / delta
 
     return new_arr
+
 
 
 @njit
